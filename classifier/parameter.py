@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # """
-# auto_encoder/param.py
+# classifier/parameter.py
 # """
 
 ############
@@ -23,8 +23,8 @@ class Parameter(object):
     input_dim = (28, 28, 1)
     latent_dim = 256
 
-    white_noise_std = 0.2
-
-    learning_rate_ae = 3e-4
+    learning_rate_class = 3e-4
 
     model_display_len = 150
+
+    num_class = 10

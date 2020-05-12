@@ -19,7 +19,7 @@ import tensorflow as tf
 #   CLASS #
 ###########
 class MNISTLoader(object):
-    def __init__(self):
+    def __init__(self, one_hot=False):
         # Load MNIST
         data_url = 'https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz'
 
@@ -33,8 +33,13 @@ class MNISTLoader(object):
 
         _x_train = tf.convert_to_tensor(np.expand_dims(x_train / 255., axis=-1), dtype=tf.float32)
         _x_test = tf.convert_to_tensor(np.expand_dims(x_test / 255., axis=-1), dtype=tf.float32)
-        _y_train = tf.convert_to_tensor(y_train, dtype=tf.int32)
-        _y_test = tf.convert_to_tensor(y_test, dtype=tf.int32)
+
+        if one_hot is True:
+            _y_train = tf.one_hot(y_train, 10, dtype=tf.int32)
+            _y_test = tf.one_hot(y_test, 10, dtype=tf.int32)
+        else:
+            _y_train = tf.convert_to_tensor(y_train, dtype=tf.int32)
+            _y_test = tf.convert_to_tensor(y_test, dtype=tf.int32)
 
         x_train_set = tf.data.Dataset.from_tensor_slices(_x_train)
         y_train_set = tf.data.Dataset.from_tensor_slices(_y_train)

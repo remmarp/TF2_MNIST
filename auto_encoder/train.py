@@ -20,7 +20,7 @@ from auto_encoder.parameter import Parameter
 from auto_encoder.networks import Encoder, Decoder
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 ################
@@ -109,7 +109,7 @@ def train(denoise=False):
         valid_loss = np.mean(mse_valid)
 
         save_message = ''
-        if minimum_mse > np.mean(mse_valid):
+        if minimum_mse > valid_loss:
             num_effective_epoch = 0
             minimum_mse = valid_loss
             save_message = "\tSave model: detecting lowest mse: {:.6f} at epoch {:04d}".format(minimum_mse, epoch)
@@ -126,11 +126,11 @@ def train(denoise=False):
         print("{}".format(save_message))
         if num_effective_epoch >= param.num_early_stopping:
             print("\t Early stopping at epoch {:04d}!".format(epoch))
-            exit(0)
+            break
 
         num_effective_epoch += 1
 
 
 if __name__ == '__main__':
-    train(denoise=False)
+    # train(denoise=False)
     train(denoise=True)

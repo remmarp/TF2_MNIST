@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # """
-# networks.py
+# auto_encoder/networks.py
 # """
 
 ############

@@ -20,7 +20,7 @@ from auto_encoder.parameter import Parameter
 from auto_encoder.networks import Encoder, Decoder
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 ################
@@ -85,8 +85,6 @@ def inference(denoise=True):
 
         loss_ae = tf.reduce_mean(mse(x_test, x_bar))
 
-        test_mse.append(loss_ae.numpy())
-
         if num_test <= param.valid_step:
             valid_mse.append(loss_ae.numpy())
         else:
@@ -98,8 +96,20 @@ def inference(denoise=True):
                                                                                np.mean(test_mse)))
 
     # 8. Draw some samples
-    save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_original.png'.format(graph)))
-    save_decode_image_array(x_bar.numpy(), path=os.path.join(graph_path, '{}_decoded.png'.format(graph)))
+    if denoise is True:
+        save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_original.png'.format(graph)))
+        noise = tf.random.normal(shape=(param.batch_size,) + param.input_dim, mean=0.0,
+                                 stddev=param.white_noise_std, dtype=tf.float32)
+        x_test = x_test + noise
+
+        z = encoder(x_test, training=False)
+        x_bar = decoder(z, training=False)
+
+        save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_add_noise.png'.format(graph)))
+        save_decode_image_array(x_bar.numpy(), path=os.path.join(graph_path, '{}_decoded.png'.format(graph)))
+    else:
+        save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_original.png'.format(graph)))
+        save_decode_image_array(x_bar.numpy(), path=os.path.join(graph_path, '{}_decoded.png'.format(graph)))
 
 
 if __name__ == '__main__':
