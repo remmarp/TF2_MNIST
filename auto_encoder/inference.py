@@ -19,6 +19,9 @@ from visualize import save_decode_image_array
 from auto_encoder.parameter import Parameter
 from auto_encoder.networks import Encoder, Decoder
 
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+
 
 ################
 #   DEFINITION #
