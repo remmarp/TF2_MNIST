@@ -43,7 +43,7 @@ class Generator(tf.keras.Model):
 
         # [None, 14, 14, 64] -> [None, 28, 28, 1]
         self.l4_deconv = layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', use_bias=False,
-                                                activation=tf.keras.activations.tanh, name='l4_deconv')
+                                                activation=tf.keras.activations.sigmoid, name='l4_deconv')
 
 
     def call(self, inputs, training=False):
