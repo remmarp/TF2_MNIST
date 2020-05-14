@@ -90,8 +90,8 @@ class Discriminator(tf.keras.Model):
         self.l2_drop = layers.Dropout(0.3, name='l2_drop')
         self.l2_flat = layers.Flatten(name='l2_flat')
 
-        # [None, 7 * 7 * 128] -> [None, 10]
-        self.l3_dense = layers.Dense(param.num_class, name='l3_dense')
+        # [None, 7 * 7 * 128] -> [None, 1]
+        self.l3_dense = layers.Dense(1, name='l3_dense')
 
     def call(self, inputs, training=False):
         l1 = self.l1_conv(inputs)

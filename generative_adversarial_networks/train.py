@@ -9,18 +9,20 @@
 # 1. Built-in modules
 import os
 import time
+from functools import partial
 
 # 2. Third-party modules
 import numpy as np
 import tensorflow as tf
 
 # 3. Own modules
+from util import gradient_penalty
 from data_loader import MNISTLoader
 from generative_adversarial_networks.parameter import Parameter
 from generative_adversarial_networks.networks import Generator, Discriminator
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 ################
@@ -39,10 +41,10 @@ def train(w_gp=False):
     # 2. Set optimizers
     opt_gen = tf.keras.optimizers.Adam(learning_rate=param.learning_rate_gen)
     opt_dis = tf.keras.optimizers.Adam(learning_rate=param.learning_rate_dis)
-    opt_class = tf.keras.optimizers.Adam(learning_rate=param.learning_rate_class)
 
     # 3. Set trainable variables
-    var_class = classifier.trainable_variables
+    var_gen = generator.trainable_variables
+    var_dis = discriminator.trainable_variables
 
     # 4. Load data
     data_loader = MNISTLoader(one_hot=False)
@@ -51,7 +53,10 @@ def train(w_gp=False):
                                                                      reshuffle_each_iteration=True)
     test_set = data_loader.test.batch(batch_size=param.batch_size, drop_remainder=True)
 
-    # 5. Etc.
+    # 5. Define loss
+    cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+    # 6. Etc.
     graph_path = os.path.join(os.getcwd(), 'graph')
     if not os.path.isdir(graph_path):
         os.mkdir(graph_path)
@@ -60,62 +65,87 @@ def train(w_gp=False):
     if not os.path.isdir(model_path):
         os.mkdir(model_path)
 
-    minimum_mse = 100.
-    num_effective_epoch = 0
+    if w_gp is True:
+        gen_name = 'gan_w_gp'
+        dis_name = 'dis_w_gp'
+    else:
+        gen_name = 'gan'
+        dis_name = 'dis'
 
-    net_name = 'cc_sparse_softmax_cross_entropy_classifier'
 
-    # 6. Train
+    # 7. Train
     start_time = time.time()
     for epoch in range(0, param.max_epoch):
-        # 6-1. Train classifier
-        for x_train, y_train in train_set:
-            with tf.GradientTape() as class_tape:
-                prediction = classifier(x_train)
+        # 7-1. Train GANs
+        for x_train, _ in train_set:
+            noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+            with tf.GradientTape() as gen_tape, tf.GradientTape() as dis_tape:
+                x_tilde = generator(noise, training=True)
 
-                loss_class = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_train,
-                                                                                           logits=prediction))
+                dis_real = discriminator(x_train, training=True)
+                dis_fake = discriminator(x_tilde, training=True)
 
-            grad_class = class_tape.gradient(loss_class, sources=var_class)
-            opt_class.apply_gradients(zip(grad_class, var_class))
+                if w_gp is False:
+                    loss_dis = cross_entropy(tf.ones_like(dis_real), dis_real) + cross_entropy(tf.zeros_like(dis_fake),
+                                                                                               dis_fake)
+                    loss_gen = cross_entropy(tf.ones_like(dis_fake), dis_fake)
+                else:
+                    real_loss, fake_loss = -tf.reduce_mean(dis_real), tf.reduce_mean(dis_fake)
+                    gp = gradient_penalty(partial(discriminator, training=True), x_train, x_tilde)
 
-        # 6-2. Validation
+                    loss_dis = (real_loss + fake_loss) + gp * param.w_gp_lambda
+                    loss_gen = -tf.reduce_mean(dis_fake)
+
+            grad_gen = gen_tape.gradient(loss_gen, var_gen)
+            grad_dis = dis_tape.gradient(loss_dis, var_dis)
+
+            opt_gen.apply_gradients(zip(grad_gen, var_gen))
+            opt_dis.apply_gradients(zip(grad_dis, var_dis))
+
+        # 7-2. Validation
         num_valid = 0
-        softmax_cc_valid = []
-        for x_valid, y_valid in test_set:
-            prediction = classifier(x_valid, training=False)
-
-            loss_class = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_valid,
-                                                                                       logits=prediction))
-            softmax_cc_valid.append(loss_class.numpy())
-
+        val_loss_dis, val_loss_gen = [], []
+        for x_valid, _ in test_set:
             if num_valid == param.valid_step:
                 break
+            noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+            x_tilde = generator(noise, training=False)
+
+            dis_real = discriminator(x_valid, training=False)
+            dis_fake = discriminator(x_tilde, training=False)
+
+            if w_gp is False:
+                loss_dis = cross_entropy(tf.ones_like(dis_real), dis_real) + cross_entropy(tf.zeros_like(dis_fake),
+                                                                                           dis_fake)
+                loss_gen = cross_entropy(tf.ones_like(dis_fake), dis_fake)
+            else:
+                real_loss, fake_loss = -tf.reduce_mean(dis_real), tf.reduce_mean(dis_fake)
+                gp = gradient_penalty(partial(discriminator, training=False), x_valid, x_tilde)
+
+                loss_dis = (real_loss + fake_loss) + gp * param.w_gp_lambda
+                loss_gen = -tf.reduce_mean(dis_fake)
+
+            val_loss_dis.append(loss_dis.numpy())
+            val_loss_gen.append(loss_gen.numpy())
+
             num_valid += 1
 
-        valid_loss = np.mean(softmax_cc_valid)
-
-        save_message = ''
-        if minimum_mse > valid_loss:
-            num_effective_epoch = 0
-            minimum_mse = valid_loss
-            save_message = "\tSave model: detecting lowest cross entropy: {:.6f} at epoch {:04d}".format(minimum_mse,
-                                                                                                         epoch)
-
-            classifier.save_weights(os.path.join(model_path, net_name))
-
+        # 7-3. Report in training
         elapsed_time = (time.time() - start_time) / 60.
+        _val_loss_dis = np.mean(np.reshape(val_loss_dis, (-1)))
+        _val_loss_gen = np.mean(np.reshape(val_loss_gen, (-1)))
+        print("[Epoch: {:04d}] {:.01f} min.\t loss dis: {:.6f}\t loss gen: {:.6f}".format(epoch, elapsed_time,
+                                                                                          _val_loss_dis,
+                                                                                          _val_loss_gen))
 
-        # 6-3. Report
-        print("[Epoch: {:04d}] {:.01f} min. class loss: {:.6f} Effective: {}".format(epoch, elapsed_time,
-                                                                                     valid_loss,
-                                                                                     (num_effective_epoch == 0)))
-        print("{}".format(save_message))
-        if epoch >= 50 and num_effective_epoch >= param.num_early_stopping:
-            print("\t Early stopping at epoch {:04d}!".format(epoch))
-            break
+    save_message = "\tSave model: End of training"
 
-        num_effective_epoch += 1
+    generator.save_weights(os.path.join(model_path, gen_name))
+    discriminator.save_weights(os.path.join(model_path, dis_name))
+
+    # 6-3. Report
+    print("[Epoch: {:04d}] {:.01f} min.".format(param.max_epoch, elapsed_time))
+    print(save_message)
 
 
 if __name__ == '__main__':

@@ -8,31 +8,35 @@
 ############
 # 1. Built-in modules
 import os
+from functools import partial
 
 # 2. Third-party modules
 import numpy as np
 import tensorflow as tf
-import sklearn.metrics as metrics
 
 # 3. Own modules
+from util import gradient_penalty
 from data_loader import MNISTLoader
-from classifier.parameter import Parameter
-from classifier.networks import Classifier
+from visualize import save_decode_image_array
+from generative_adversarial_networks.parameter import Parameter
+from generative_adversarial_networks.networks import Generator, Discriminator
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 ################
 #   DEFINITION #
 ################
-def inference():
+def inference(w_gp=False):
     param = Parameter()
 
     # 1. Build models
-    classifier = Classifier(param).model()
+    generator = Generator(param).model()
+    discriminator = Discriminator(param).model()
 
-    classifier.summary(line_length=param.model_display_len)
+    generator.summary(line_length=param.model_display_len)
+    discriminator.summary(line_length=param.model_display_len)
 
     # 2. Load data
     data_loader = MNISTLoader(one_hot=False)
@@ -49,67 +53,92 @@ def inference():
         os.mkdir(model_path)
 
     # 4. Load model
-    _net = 'cc_sparse_softmax_cross_entropy_classifier'
-    # graph = ''
+    if w_gp is True:
+        gen_name = 'gan_w_gp'
+        dis_name = 'dis_w_gp'
+        graph = 'gan_w_gp'
+    else:
+        gen_name = 'gan'
+        dis_name = 'dis'
+        graph = 'gan'
 
-    classifier.load_weights(os.path.join(model_path, _net))
+    generator.load_weights(os.path.join(model_path, gen_name))
+    discriminator.load_weights(os.path.join(model_path, dis_name))
 
     # 5. Define loss
+    cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
     # 6. Inference
-    train_loss = []
+    train_dis_loss, train_gen_loss = [], []
+    for x_train, _ in train_set:
+        noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+        x_tilde = generator(noise, training=False)
 
-    train_real_label, train_prediction = [], []
-    for x_train, y_train in train_set:
-        prediction = classifier(x_train, training=False)
+        dis_real = discriminator(x_train, training=False)
+        dis_fake = discriminator(x_tilde, training=False)
 
-        loss_class = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_train,
-                                                                                   logits=prediction))
-        train_loss.append(loss_class.numpy())
+        if w_gp is False:
+            loss_dis = cross_entropy(tf.ones_like(dis_real), dis_real) + cross_entropy(tf.zeros_like(dis_fake),
+                                                                                       dis_fake)
+            loss_gen = cross_entropy(tf.ones_like(dis_fake), dis_fake)
+        else:
+            real_loss, fake_loss = -tf.reduce_mean(dis_real), tf.reduce_mean(dis_fake)
+            gp = gradient_penalty(partial(discriminator, training=False), x_train, x_tilde)
 
-        _pred_y = tf.argmax(prediction, axis=1)
+            loss_dis = (real_loss + fake_loss) + gp * param.w_gp_lambda
+            loss_gen = -tf.reduce_mean(dis_fake)
 
-        train_real_label.append(y_train.numpy())
-        train_prediction.append(_pred_y.numpy())
+        train_dis_loss.append(loss_dis.numpy())
+        train_gen_loss.append(loss_gen.numpy())
 
     num_test = 0
-    valid_loss = []
-    test_loss = []
+    valid_dis_loss, valid_gen_loss = [], []
+    test_dis_loss, test_gen_loss = [], []
 
-    valid_real_label, valid_prediction = [], []
-    test_real_label, test_prediction = [], []
+    for x_test, _ in test_set:
+        noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+        x_tilde = generator(noise, training=False)
 
-    for x_test, y_test in test_set:
-        prediction = classifier(x_test, training=False)
+        dis_real = discriminator(x_test, training=False)
+        dis_fake = discriminator(x_tilde, training=False)
 
-        loss_class = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_test,
-                                                                                   logits=prediction))
-        _pred_y = tf.argmax(prediction, axis=1)
+        if w_gp is False:
+            loss_dis = cross_entropy(tf.ones_like(dis_real), dis_real) + cross_entropy(tf.zeros_like(dis_fake),
+                                                                                       dis_fake)
+            loss_gen = cross_entropy(tf.ones_like(dis_fake), dis_fake)
+        else:
+            real_loss, fake_loss = -tf.reduce_mean(dis_real), tf.reduce_mean(dis_fake)
+            gp = gradient_penalty(partial(discriminator, training=False), x_test, x_tilde)
+
+            loss_dis = (real_loss + fake_loss) + gp * param.w_gp_lambda
+            loss_gen = -tf.reduce_mean(dis_fake)
+
         if num_test <= param.valid_step:
-            valid_loss.append(loss_class.numpy())
-            valid_prediction.append(_pred_y.numpy())
-            valid_real_label.append(y_test.numpy())
+            valid_dis_loss.append(loss_dis.numpy())
+            valid_gen_loss.append(loss_gen.numpy())
 
         else:
-            test_loss.append(loss_class.numpy())
-            test_prediction.append(_pred_y.numpy())
-            test_real_label.append(y_test.numpy())
+            test_dis_loss.append(loss_dis.numpy())
+            test_gen_loss.append(loss_gen.numpy())
         num_test += 1
 
     # 7. Report
-    train_real_label, train_prediction = np.reshape(train_real_label, (-1)), np.reshape(train_prediction, (-1))
-    valid_real_label, valid_prediction = np.reshape(valid_real_label, (-1)), np.reshape(valid_prediction, (-1))
-    test_real_label, test_prediction = np.reshape(test_real_label, (-1)), np.reshape(test_prediction, (-1))
+    train_dis_loss = np.mean(np.reshape(train_dis_loss, (-1)))
+    valid_dis_loss = np.mean(np.reshape(valid_dis_loss, (-1)))
+    test_dis_loss = np.mean(np.reshape(test_dis_loss, (-1)))
 
-    train_acc = metrics.accuracy_score(train_real_label, train_prediction)
-    valid_acc = metrics.accuracy_score(valid_real_label, valid_prediction)
-    test_acc = metrics.accuracy_score(test_real_label, test_prediction)
+    train_gen_loss = np.mean(np.reshape(train_gen_loss, (-1)))
+    valid_gen_loss = np.mean(np.reshape(valid_gen_loss, (-1)))
+    test_gen_loss = np.mean(np.reshape(test_gen_loss, (-1)))
 
-    print("[Loss] Train: {:.06f}\t Validation: {:.06f}\t Test: {:.06f}".format(np.mean(train_loss), np.mean(valid_loss),
-                                                                               np.mean(test_loss)))
-    print("[Accuracy] Train: {:.05f}\t Validation: {:.05f}\t Test: {:.05f}".format(train_acc, valid_acc, test_acc))
+    print("[Loss dis] Train: {:.06f}\t Validation: {:.06f}\t Test: {:.06f}".format(train_dis_loss, valid_dis_loss,
+                                                                                   test_dis_loss))
+    print("[Loss gen] Train: {:.06f}\t Validation: {:.06f}\t Test: {:.06f}".format(train_gen_loss, valid_gen_loss,
+                                                                                   test_gen_loss))
 
     # 8. Draw some samples
+    save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_original.png'.format(graph)))
+    save_decode_image_array(x_tilde.numpy(), path=os.path.join(graph_path, '{}_generated.png'.format(graph)))
 
 
 if __name__ == '__main__':
