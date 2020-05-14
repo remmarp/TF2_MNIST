@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # """
-# classifier/train.py
+# generative_adversarial_networks/train.py
 # """
 
 ############
@@ -22,7 +22,7 @@ from generative_adversarial_networks.parameter import Parameter
 from generative_adversarial_networks.networks import Generator, Discriminator
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 ################
@@ -151,4 +151,5 @@ def train(w_gp=False):
 
 
 if __name__ == '__main__':
-    train()
+    train(False)
+    train(True)

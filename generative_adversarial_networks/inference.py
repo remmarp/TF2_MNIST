@@ -22,7 +22,7 @@ from generative_adversarial_networks.parameter import Parameter
 from generative_adversarial_networks.networks import Generator, Discriminator
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 ################
@@ -71,7 +71,8 @@ def inference(w_gp=False):
     # 6. Inference
     train_dis_loss, train_gen_loss = [], []
     for x_train, _ in train_set:
-        noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+        # noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+        noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0, stddev=0.3, dtype=tf.float32)
         x_tilde = generator(noise, training=False)
 
         dis_real = discriminator(x_train, training=False)
@@ -96,7 +97,8 @@ def inference(w_gp=False):
     test_dis_loss, test_gen_loss = [], []
 
     for x_test, _ in test_set:
-        noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+        # noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+        noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0, stddev=0.3, dtype=tf.float32)
         x_tilde = generator(noise, training=False)
 
         dis_real = discriminator(x_test, training=False)
@@ -142,4 +144,5 @@ def inference(w_gp=False):
 
 
 if __name__ == '__main__':
-    inference()
+    inference(False)
+    inference(True)
