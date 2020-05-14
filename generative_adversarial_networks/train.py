@@ -78,7 +78,8 @@ def train(w_gp=False):
     for epoch in range(0, param.max_epoch):
         # 7-1. Train GANs
         for x_train, _ in train_set:
-            noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+            noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0, stddev=0.3, dtype=tf.float32)
+            # noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
             with tf.GradientTape() as gen_tape, tf.GradientTape() as dis_tape:
                 x_tilde = generator(noise, training=True)
 
@@ -108,7 +109,8 @@ def train(w_gp=False):
         for x_valid, _ in test_set:
             if num_valid == param.valid_step:
                 break
-            noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
+            noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0, stddev=0.3, dtype=tf.float32)
+            # noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
             x_tilde = generator(noise, training=False)
 
             dis_real = discriminator(x_valid, training=False)

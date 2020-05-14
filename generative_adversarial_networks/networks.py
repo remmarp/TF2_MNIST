@@ -24,34 +24,42 @@ class Generator(tf.keras.Model):
         self.param = param
 
         # [None, 256] -> [None, 7, 7, 256]
-        self.l1_dense = layers.Dense(7 * 7 * 256, use_bias=False, input_shape=(param.latent_dim, ), name='l1_dense')
+        self.l1_reshape = layers.Reshape((1, 1, param.latent_dim))
+        self.l1_deconv = layers.Conv2DTranspose(1024, (4, 4), strides=(1, 1), padding='valid', input_shape=(1, 1,
+                                                                                                            param.latent_dim))
+        # self.l1_dense = layers.Dense(7 * 7 * 256, use_bias=False, input_shape=(param.latent_dim, ), name='l1_dense')
         self.l1_bn = layers.BatchNormalization(name='l1_bn')
         self.l1_leaky = layers.LeakyReLU(name='l1_leaky')
-        self.l1_reshape = layers.Reshape((7, 7, 256))
+        # self.l1_reshape = layers.Reshape((7, 7, 256))
 
         # [None, 7, 7, 256] -> [None, 7, 7, 128]
-        self.l2_deconv = layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False,
+        self.l2_deconv = layers.Conv2DTranspose(512, (4, 4), strides=(1, 1), padding='same', use_bias=False,
                                                 name='l2_deconv')
         self.l2_bn = layers.BatchNormalization(name='l2_bn')
         self.l2_leaky = layers.LeakyReLU(name='l2_leaky')
 
         # [None, 7, 7, 128] -> [None, 14, 14, 64]
-        self.l3_deconv = layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False,
+        self.l3_deconv = layers.Conv2DTranspose(256, (4, 4), strides=(2, 2), padding='same', use_bias=False,
                                                 name='l3_deconv')
         self.l3_bn = layers.BatchNormalization(name='l3_bn')
         self.l3_leaky = layers.LeakyReLU(name='l3_leaky')
 
         # [None, 14, 14, 64] -> [None, 28, 28, 1]
-        self.l4_deconv = layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', use_bias=False,
-                                                activation=tf.keras.activations.sigmoid, name='l4_deconv')
+        self.l4_deconv = layers.Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same', use_bias=False,
+                                                name='l4_deconv')
+        self.l4_bn = layers.BatchNormalization(name='l4_bn')
+        self.l4_leaky = layers.LeakyReLU(name='l4_leaky')
+
+        self.l5_deconv = layers.Conv2DTranspose(1, (4, 4), strides=(2, 2), padding='same',
+                                                activation=tf.keras.activations.tanh, name='l5_deconv')
 
 
     def call(self, inputs, training=False):
-        l1 = self.l1_dense(inputs)
+        l1 = self.l1_reshape(inputs)
+        l1 = self.l1_deconv(l1)
         if training is True:
             l1 = self.l1_bn(l1)
-        l1 = self.l1_leaky(l1)
-        l1 = self.l1_reshape(l1)
+        l1 = self.l1_leaky
 
         l2 = self.l2_deconv(l1)
         if training is True:
@@ -63,9 +71,16 @@ class Generator(tf.keras.Model):
             l3 = self.l3_bn(l3)
         l3 = self.l3_leaky(l3)
 
-        l4 = self.l4_deconv(l3)
+        l4 = self.l3_deconv(l3)
+        if training is True:
+            l4 = self.l3_bn(l4)
+        l4 = self.l3_leaky(l4)
 
-        return l4
+        l4 = self.l4_deconv(l4)
+
+        l5 = self.l5_deconv(l4)
+
+        return l5
 
     def model(self):
         z = tf.keras.Input(shape=self.param.latent_dim, dtype=tf.float32, name='z')
