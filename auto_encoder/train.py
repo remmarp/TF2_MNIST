@@ -132,5 +132,5 @@ def train(denoise=False):
 
 
 if __name__ == '__main__':
-    # train(denoise=False)
+    train(denoise=False)
     train(denoise=True)

@@ -16,8 +16,8 @@ import tensorflow as tf
 
 # 3. Own modules
 from data_loader import MNISTLoader
-from classifier.parameter import Parameter
-from classifier.networks import Classifier
+from generative_adversarial_networks.parameter import Parameter
+from generative_adversarial_networks.networks import Generator, Discriminator
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
@@ -26,14 +26,19 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 ################
 #   DEFINITION #
 ################
-def train():
+def train(w_gp=False):
     param = Parameter()
 
     # 1. Build models
-    classifier = Classifier(param).model()
-    classifier.summary(line_length=param.model_display_len)
+    generator = Generator(param).model()
+    discriminator = Discriminator(param).model()
+
+    generator.summary(line_length=param.model_display_len)
+    discriminator.summary(line_length=param.model_display_len)
 
     # 2. Set optimizers
+    opt_gen = tf.keras.optimizers.Adam(learning_rate=param.learning_rate_gen)
+    opt_dis = tf.keras.optimizers.Adam(learning_rate=param.learning_rate_dis)
     opt_class = tf.keras.optimizers.Adam(learning_rate=param.learning_rate_class)
 
     # 3. Set trainable variables
@@ -106,7 +111,7 @@ def train():
                                                                                      valid_loss,
                                                                                      (num_effective_epoch == 0)))
         print("{}".format(save_message))
-        if num_effective_epoch >= param.num_early_stopping:
+        if epoch >= 50 and num_effective_epoch >= param.num_early_stopping:
             print("\t Early stopping at epoch {:04d}!".format(epoch))
             break
 
