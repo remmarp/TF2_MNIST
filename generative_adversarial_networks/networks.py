@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # """
-# classifier/networks.py
+# generative_adversarial_networks/networks.py
 # """
 
 ############

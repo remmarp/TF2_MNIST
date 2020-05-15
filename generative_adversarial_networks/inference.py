@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # """
-# classifier/inference.py
+# generative_adversarial_networks/inference.py
 # """
 
 ############
@@ -8,7 +8,10 @@
 ############
 # 1. Built-in modules
 import os
+import sys
 from functools import partial
+
+sys.path.append(os.getcwd())
 
 # 2. Third-party modules
 import numpy as np
@@ -44,11 +47,11 @@ def inference(w_gp=False):
     test_set = data_loader.test.batch(batch_size=param.batch_size, drop_remainder=True)
 
     # 3. Etc.
-    graph_path = os.path.join(os.getcwd(), 'graph')
+    graph_path = os.path.join(param.cur_dir, 'graph')
     if not os.path.isdir(graph_path):
         os.mkdir(graph_path)
 
-    model_path = os.path.join(os.getcwd(), 'model')
+    model_path = os.path.join(param.cur_dir, 'model')
     if not os.path.isdir(model_path):
         os.mkdir(model_path)
 

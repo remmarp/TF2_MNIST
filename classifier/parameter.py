@@ -7,6 +7,7 @@
 #   IMPORT #
 ############
 # 1. Built-in modules
+import os
 # 2. Third-party modules
 # 3. Own modules
 
@@ -27,3 +28,5 @@ class Parameter(object):
     model_display_len = 150
 
     num_class = 10
+
+    cur_dir = os.path.join(os.getcwd(), 'classifier')

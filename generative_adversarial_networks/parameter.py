@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 # """
-# classifier/parameter.py
+# generative_adversarial_networks/parameter.py
 # """
 
 ############
 #   IMPORT #
 ############
 # 1. Built-in modules
+import os
 # 2. Third-party modules
 # 3. Own modules
 
@@ -28,3 +29,5 @@ class Parameter(object):
     model_display_len = 150
 
     w_gp_lambda = 0.1
+
+    cur_dir = os.path.join(os.getcwd(), 'generative_adversarial_networks')
