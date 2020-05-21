@@ -12,15 +12,6 @@
 import tensorflow as tf
 import tensorflow.keras.layers as layers
 
-# import torch
-# import torchvision
-# from torch import nn
-# from torch.autograd import Variable
-# from torch.utils.data import DataLoader
-# from torchvision import transforms
-# from torchvision.datasets import MNIST
-# from torchvision.utils import save_image
-
 # 3. Own modules
 
 
