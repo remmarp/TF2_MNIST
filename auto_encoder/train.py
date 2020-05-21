@@ -145,7 +145,7 @@ def train(denoise=False):
 
         elapsed_time = (time.time() - start_time) / 60.
 
-        # 7-3. Report
+        # 8-3. Report
         print("[Epoch: {:04d}] {:.01f} min. ae loss: {:.6f} Effective: {}".format(epoch, elapsed_time,
                                                                                   valid_loss,
                                                                                   (num_effective_epoch == 0)))
