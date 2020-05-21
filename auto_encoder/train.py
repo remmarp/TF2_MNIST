@@ -138,7 +138,7 @@ def train(denoise=False):
         if minimum_mse > valid_loss:
             num_effective_epoch = 0
             minimum_mse = valid_loss
-            save_message = "\tSave model: detecting lowest mse: {:.6f} at epoch {:04d}".format(minimum_mse, epoch)
+            save_message = "\tSave model: detecting lowest L1: {:.6f} at epoch {:04d}".format(minimum_mse, epoch)
 
             encoder.save_weights(os.path.join(model_path, enc_name))
             decoder.save_weights(os.path.join(model_path, dec_name))
