@@ -29,4 +29,5 @@ class Parameter(object):
 
     num_class = 10
 
-    cur_dir = os.path.join(os.getcwd(), 'classifier')
+    cur_dir = os.getcwd()
+    save_frequency = 10
