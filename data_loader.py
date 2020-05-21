@@ -31,8 +31,8 @@ class MNISTLoader(object):
         self.num_train = len(x_train)
         self.num_test = len(x_test)
 
-        _x_train = tf.convert_to_tensor(np.expand_dims(x_train / 255., axis=-1), dtype=tf.float32)
-        _x_test = tf.convert_to_tensor(np.expand_dims(x_test / 255., axis=-1), dtype=tf.float32)
+        _x_train = tf.convert_to_tensor(np.expand_dims((x_train - 127.5) / 127.5, axis=-1), dtype=tf.float32)
+        _x_test = tf.convert_to_tensor(np.expand_dims((x_test - 127.5) / 127.5, axis=-1), dtype=tf.float32)
 
         if one_hot is True:
             _y_train = tf.one_hot(y_train, 10, dtype=tf.int32)
@@ -60,10 +60,10 @@ class NoveltyDetectionMNISTLoader(object):
         with np.load(path) as data:
             x_train, y_train, x_test, y_test = data['x_train'], data['y_train'], data['x_test'], data['y_test']
 
-        train_data_tensor = np.expand_dims(x_train[y_train == cls] / 255., axis=-1)
+        train_data_tensor = np.expand_dims((x_train[y_train == cls] - 127.5) / 127.5, axis=-1)
         self.train = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor(train_data_tensor, dtype=tf.float32))
 
-        test_data_tensor = np.expand_dims(x_test / 255., axis=-1)
+        test_data_tensor = np.expand_dims((x_test - 127.5) / 127.5, axis=-1)
         test_data = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor(test_data_tensor, dtype=tf.float32))
 
         test_label_tensor = (y_test == cls)

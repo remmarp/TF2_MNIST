@@ -36,9 +36,6 @@ def inference(denoise=True):
     encoder = Encoder(param).model()
     decoder = Decoder(param).model()
 
-    encoder.summary(line_length=param.model_display_len)
-    decoder.summary(line_length=param.model_display_len)
-
     # 2. Load data
     data_loader = MNISTLoader()
     train_set = data_loader.train.batch(batch_size=param.batch_size, drop_remainder=True)
@@ -55,43 +52,53 @@ def inference(denoise=True):
 
     # 4. Load model
     if denoise is True:
-        _enc = 'mse_denoise_ae_encoder'
-        _dec = 'mse_denoise_ae_decoder'
         graph = 'denoising_ae'
+        enc_name = 'encoder_denoise'
+        dec_name = 'decoder_denoise'
     else:
-        _enc = 'mse_ae_encoder'
-        _dec = 'mse_ae_decoder'
         graph = 'ae'
+        enc_name = 'encoder'
+        dec_name = 'decoder'
 
-    encoder.load_weights(os.path.join(model_path, _enc))
-    decoder.load_weights(os.path.join(model_path, _dec))
+    encoder.load_weights(os.path.join(model_path, enc_name))
+    decoder.load_weights(os.path.join(model_path, dec_name))
 
     # 5. Define loss
-    mse = tf.keras.losses.MeanSquaredError()
+
+    # 6. Define test step ##############################################################################################
+    def testing_step(_x):
+        if denoise is True:
+            _noise = tf.random.normal(shape=(param.batch_size,) + param.input_dim, mean=0.0,
+                                      stddev=param.white_noise_std, dtype=tf.float32)
+            _x_test = _x + _noise
+        else:
+            _x_test = _x
+
+        _z_tilde = encoder(_x_test, training=False)
+        _x_bar = decoder(_z_tilde, training=False)
+
+        _loss_ae = tf.reduce_mean(tf.abs(tf.subtract(_x, _x_bar)))  # pixel-wise loss
+
+        return _x_test, _x_bar, _loss_ae.numpy()
+    ####################################################################################################################
 
     # 6. Inference
     train_mse = []
     for x_train, _ in train_set:
-        z = encoder(x_train, training=False)
-        x_bar = decoder(z, training=False)
+        x_noise, x_bar, loss_ae = testing_step(x_train)
 
-        loss_ae = tf.reduce_mean(mse(x_train, x_bar))
-
-        train_mse.append(loss_ae.numpy())
+        train_mse.append(loss_ae)
 
     num_test = 0
     valid_mse = []
     test_mse = []
     for x_test, _ in test_set:
-        z = encoder(x_test, training=False)
-        x_bar = decoder(z, training=False)
-
-        loss_ae = tf.reduce_mean(mse(x_test, x_bar))
+        x_noise, x_bar, loss_ae = testing_step(x_test)
 
         if num_test <= param.valid_step:
-            valid_mse.append(loss_ae.numpy())
+            valid_mse.append(loss_ae)
         else:
-            test_mse.append(loss_ae.numpy())
+            test_mse.append(loss_ae)
         num_test += 1
 
     # 7. Report
@@ -100,19 +107,9 @@ def inference(denoise=True):
 
     # 8. Draw some samples
     if denoise is True:
-        save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_original.png'.format(graph)))
-        noise = tf.random.normal(shape=(param.batch_size,) + param.input_dim, mean=0.0,
-                                 stddev=param.white_noise_std, dtype=tf.float32)
-        x_test = x_test + noise
-
-        z = encoder(x_test, training=False)
-        x_bar = decoder(z, training=False)
-
-        save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_add_noise.png'.format(graph)))
-        save_decode_image_array(x_bar.numpy(), path=os.path.join(graph_path, '{}_decoded.png'.format(graph)))
-    else:
-        save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_original.png'.format(graph)))
-        save_decode_image_array(x_bar.numpy(), path=os.path.join(graph_path, '{}_decoded.png'.format(graph)))
+        save_decode_image_array(x_noise.numpy(), path=os.path.join(graph_path, '{}_noise.png'.format(graph)))
+    save_decode_image_array(x_test.numpy(), path=os.path.join(graph_path, '{}_original.png'.format(graph)))
+    save_decode_image_array(x_bar.numpy(), path=os.path.join(graph_path, '{}_decoded.png'.format(graph)))
 
 
 if __name__ == '__main__':

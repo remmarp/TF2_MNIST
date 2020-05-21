@@ -26,8 +26,9 @@ class Parameter(object):
 
     white_noise_std = 0.2
 
-    learning_rate_ae = 3e-4
+    learning_rate_ae = 2e-3
 
     model_display_len = 150
 
-    cur_dir = os.path.join(os.getcwd(), 'auto_encoder')
+    cur_dir = os.getcwd()
+    save_frequency = 10
