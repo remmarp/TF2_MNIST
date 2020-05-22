@@ -21,11 +21,12 @@ import tensorflow as tf
 # 3. Own modules
 from util import gradient_penalty
 from data_loader import MNISTLoader
+from visualize import save_decode_image_array
 from generative_adversarial_networks.parameter import Parameter
 from generative_adversarial_networks.networks import Generator, Discriminator
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 ################
@@ -37,9 +38,6 @@ def train(w_gp=False):
     # 1. Build models
     generator = Generator(param).model()
     discriminator = Discriminator(param).model()
-
-    generator.summary(line_length=param.model_display_len)
-    discriminator.summary(line_length=param.model_display_len)
 
     # 2. Set optimizers
     opt_gen = tf.keras.optimizers.Adam(learning_rate=param.learning_rate_gen)
@@ -60,6 +58,8 @@ def train(w_gp=False):
     cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
     # 6. Etc.
+    check_point_dir = os.path.join(param.cur_dir, 'training_checkpoints')
+
     graph_path = os.path.join(param.cur_dir, 'graph')
     if not os.path.isdir(graph_path):
         os.mkdir(graph_path)
@@ -69,71 +69,101 @@ def train(w_gp=False):
         os.mkdir(model_path)
 
     if w_gp is True:
+        check_point_prefix = os.path.join(check_point_dir, 'gan_w_gp')
         gen_name = 'gan_w_gp'
         dis_name = 'dis_w_gp'
+        graph = 'gan_w_gp'
     else:
+        check_point_prefix = os.path.join(check_point_dir, 'gan')
         gen_name = 'gan'
         dis_name = 'dis'
+        graph = 'gan'
 
+    check_point = tf.train.Checkpoint(opt_gen=opt_gen, opt_dis=opt_dis, generator=generator,
+                                      discriminator=discriminator)
+    ckpt_manager = tf.train.CheckpointManager(check_point, check_point_dir, max_to_keep=5,
+                                              checkpoint_name=check_point_prefix)
 
-    # 7. Train
+    # 7. Define train / validation step ################################################################################
+    def training_step(_x):
+        with tf.GradientTape() as _gen_tape, tf.GradientTape() as _dis_tape:
+            _noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0,
+                                      stddev=param.prior_noise_std, dtype=tf.float32)
+
+            _x_tilde = generator(_noise, training=True)
+
+            _dis_real = discriminator(_x, training=True)
+            _dis_fake = discriminator(_x_tilde, training=True)
+
+            if w_gp is True:
+                _real_loss, _fake_loss = -tf.reduce_mean(_dis_real), tf.reduce_mean(_dis_fake)
+                _gp = gradient_penalty(partial(discriminator, training=True), _x, _x_tilde)
+
+                _loss_dis = (_real_loss + _fake_loss) + _gp * param.w_gp_lambda
+                _loss_gen = -tf.reduce_mean(_dis_fake)
+            else:
+                _loss_dis = cross_entropy(tf.ones_like(_dis_real), _dis_real) + cross_entropy(tf.zeros_like(_dis_fake),
+                                                                                              _dis_fake)
+                _loss_gen = cross_entropy(tf.ones_like(_dis_fake), _dis_fake)
+
+        _grad_gen = _gen_tape.gradient(_loss_gen, var_gen)
+        _grad_dis = _dis_tape.gradient(_loss_dis, var_dis)
+
+        opt_gen.apply_gradients(zip(_grad_gen, var_gen))
+        opt_dis.apply_gradients(zip(_grad_dis, var_dis))
+
+    def validation_step(_x):
+        _noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0,
+                                  stddev=param.prior_noise_std, dtype=tf.float32)
+
+        _x_tilde = generator(_noise, training=False)
+
+        _dis_real = discriminator(_x, training=False)
+        _dis_fake = discriminator(_x_tilde, training=False)
+
+        if w_gp is True:
+            _real_loss, _fake_loss = -tf.reduce_mean(_dis_real), tf.reduce_mean(_dis_fake)
+            _gp = gradient_penalty(partial(discriminator, training=False), _x, _x_tilde)
+
+            _loss_dis = (_real_loss + _fake_loss) + _gp * param.w_gp_lambda
+            _loss_gen = -tf.reduce_mean(_dis_fake)
+        else:
+            _loss_dis = cross_entropy(tf.ones_like(_dis_real), _dis_real) + cross_entropy(tf.zeros_like(_dis_fake),
+                                                                                          _dis_fake)
+            _loss_gen = cross_entropy(tf.ones_like(_dis_fake), _dis_fake)
+
+        return _x_tilde, _loss_dis.numpy(), _loss_gen.numpy()
+    ####################################################################################################################
+
+    # 8. Train
     start_time = time.time()
     for epoch in range(0, param.max_epoch):
-        # 7-1. Train GANs
+        # 8-1. Train GANs
         for x_train, _ in train_set:
-            noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0, stddev=0.3, dtype=tf.float32)
-            # noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
-            with tf.GradientTape() as gen_tape, tf.GradientTape() as dis_tape:
-                x_tilde = generator(noise, training=True)
+            training_step(x_train)
 
-                dis_real = discriminator(x_train, training=True)
-                dis_fake = discriminator(x_tilde, training=True)
-
-                if w_gp is False:
-                    loss_dis = cross_entropy(tf.ones_like(dis_real), dis_real) + cross_entropy(tf.zeros_like(dis_fake),
-                                                                                               dis_fake)
-                    loss_gen = cross_entropy(tf.ones_like(dis_fake), dis_fake)
-                else:
-                    real_loss, fake_loss = -tf.reduce_mean(dis_real), tf.reduce_mean(dis_fake)
-                    gp = gradient_penalty(partial(discriminator, training=True), x_train, x_tilde)
-
-                    loss_dis = (real_loss + fake_loss) + gp * param.w_gp_lambda
-                    loss_gen = -tf.reduce_mean(dis_fake)
-
-            grad_gen = gen_tape.gradient(loss_gen, var_gen)
-            grad_dis = dis_tape.gradient(loss_dis, var_dis)
-
-            opt_gen.apply_gradients(zip(grad_gen, var_gen))
-            opt_dis.apply_gradients(zip(grad_dis, var_dis))
-
-        # 7-2. Validation
+        # 8-2. Validation
         num_valid = 0
         val_loss_dis, val_loss_gen = [], []
         for x_valid, _ in test_set:
             if num_valid == param.valid_step:
                 break
-            noise = tf.random.normal(shape=(param.batch_size, param.latent_dim), mean=0.0, stddev=0.3, dtype=tf.float32)
-            # noise = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1, maxval=1, dtype=tf.float32)
-            x_tilde = generator(noise, training=False)
 
-            dis_real = discriminator(x_valid, training=False)
-            dis_fake = discriminator(x_tilde, training=False)
+            x_tilde, loss_dis, loss_gen = validation_step(x_valid)
 
-            if w_gp is False:
-                loss_dis = cross_entropy(tf.ones_like(dis_real), dis_real) + cross_entropy(tf.zeros_like(dis_fake),
-                                                                                           dis_fake)
-                loss_gen = cross_entropy(tf.ones_like(dis_fake), dis_fake)
-            else:
-                real_loss, fake_loss = -tf.reduce_mean(dis_real), tf.reduce_mean(dis_fake)
-                gp = gradient_penalty(partial(discriminator, training=False), x_valid, x_tilde)
-
-                loss_dis = (real_loss + fake_loss) + gp * param.w_gp_lambda
-                loss_gen = -tf.reduce_mean(dis_fake)
-
-            val_loss_dis.append(loss_dis.numpy())
-            val_loss_gen.append(loss_gen.numpy())
+            val_loss_dis.append(loss_dis)
+            val_loss_gen.append(loss_gen)
 
             num_valid += 1
+
+        if epoch % param.save_frequency == 0 and epoch > 1:
+            save_decode_image_array(x_valid.numpy(), path=os.path.join(graph_path,
+                                                                       '{}_original-{:04d}.png'.format(graph,
+                                                                                                       epoch)))
+            save_decode_image_array(x_tilde.numpy(),
+                                    path=os.path.join(graph_path, '{}_generated-{:04d}.png'.format(graph, epoch)))
+
+            ckpt_manager.save(checkpoint_number=epoch)
 
         # 7-3. Report in training
         elapsed_time = (time.time() - start_time) / 60.

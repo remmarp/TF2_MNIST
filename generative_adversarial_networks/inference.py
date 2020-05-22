@@ -25,7 +25,7 @@ from generative_adversarial_networks.parameter import Parameter
 from generative_adversarial_networks.networks import Generator, Discriminator
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 ################
@@ -37,9 +37,6 @@ def inference(w_gp=False):
     # 1. Build models
     generator = Generator(param).model()
     discriminator = Discriminator(param).model()
-
-    generator.summary(line_length=param.model_display_len)
-    discriminator.summary(line_length=param.model_display_len)
 
     # 2. Load data
     data_loader = MNISTLoader(one_hot=False)
