@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # """
 # adversarial_autoencoder/networks.py
+#   Supervised AAE: Disentagling the label information form the hidden code by providing the one-hot vector
 # """
 
 ############
@@ -18,166 +19,156 @@ import tensorflow.keras.layers as layers
 ###########
 #   CLASS #
 ###########
-class Encoder(tf.keras.Model):
+class Encoder(object):
     def __init__(self, param):
-        super(Encoder, self).__init__()
         self.param = param
 
-        # [None, 28, 28, 1] -> [None, 14, 14, 64]
-        self.l1_conv = layers.Conv2D(64, (5, 5), strides=(2, 2), padding='same', use_bias=False,
-                                     input_shape=param.input_dim, name='l1_conv')
-        # self.l1_bn = layers.BatchNormalization(name='l1_bn')
-        self.l1_leaky = layers.LeakyReLU(name='l1_leaky')
-
-        # [None, 14, 14, 64] -> [None, 7, 7, 128]
-        self.l2_conv = layers.Conv2D(128, (5, 5), strides=(2, 2), padding='same', use_bias=False, name='l2_conv')
-        # self.l2_bn = layers.BatchNormalization(name='l2_bn')
-        self.l2_leaky = layers.LeakyReLU(name='l2_leaky')
-
-        # [None, 7, 7, 128] -> [None, 7, 7, 256]
-        self.l3_conv = layers.Conv2D(256, (5, 5), strides=(1, 1), padding='same', use_bias=False, name='l3_conv')
-        # self.l3_bn = layers.BatchNormalization(name='l3_bn')
-        self.l3_leaky = layers.LeakyReLU(name='l3_leaky')
-        self.l3_flat = layers.Flatten(name='l3_flat')
-
-        # [None, 7, 7, 256] -> [None, 256]
-        self.l4_dense = layers.Dense(param.latent_dim, activation=tf.keras.activations.tanh, name='l4_dense')
-
-    def call(self, inputs, training=False):
-        l1 = self.l1_conv(inputs)
-        # if training is True:
-        #     l1 = self.l1_bn(l1)
-        l1 = self.l1_leaky(l1)
-
-        l2 = self.l2_conv(l1)
-        # if training is True:
-        #     l2 = self.l2_bn(l2)
-        l2 = self.l2_leaky(l2)
-
-        l3 = self.l3_conv(l2)
-        # if training is True:
-        #     l3 = self.l3_bn(l3)
-        l3 = self.l3_leaky(l3)
-        l3 = self.l3_flat(l3)
-
-        l4 = self.l4_dense(l3)
-
-        return l4
-
     def model(self):
-        x = tf.keras.Input(shape=self.param.input_dim, dtype=tf.float32, name='x')
-        return tf.keras.Model(inputs=x, outputs=self.call(x))
+        model = tf.keras.Sequential(name='Encoder')
+
+        # Layer 1
+        model.add(layers.Flatten(input_shape=(28, 28, 1), name='l1_flatten'))
+        model.add(layers.Dense(1024, activation=tf.keras.activations.relu, name='l1_dense'))
+        model.add(layers.BatchNormalization(name='l1_bn'))
+        assert model.output_shape == (None, 1024)
+
+        # Layer 2
+        model.add(layers.Dense(512, activation=tf.keras.activations.relu, name='l2_dense'))
+        model.add(layers.BatchNormalization(name='l2_bn'))
+        assert model.output_shape == (None, 512)
+
+        # Layer 3
+        model.add(layers.Dense(256, activation=tf.keras.activations.relu, name='l3_dense'))
+        model.add(layers.BatchNormalization(name='l3_bn'))
+        assert model.output_shape == (None, 256)
+
+        # Layer 4
+        model.add(layers.Dense(self.param.latent_dim, activation='tanh', name='l4_dense'))
+
+        assert model.output_shape == (None, self.param.latent_dim)
+
+        # Layer 1
+        # model = tf.keras.Sequential()
+        # model.add(layers.Conv2D(64, (5, 5), strides=(2, 2), padding='same', use_bias=False,
+        #                         input_shape=self.param.input_dim, name='l1_conv'))
+        # model.add(layers.BatchNormalization(name='l1_bn'))
+        # model.add(layers.LeakyReLU(name='l1_leaky'))
+        # assert model.output_shape == (None, 14, 14, 64)
+        #
+        # # Layer 2
+        # model.add(layers.Conv2D(128, (5, 5), strides=(2, 2), padding='same', use_bias=False, name='l2_conv'))
+        # model.add(layers.BatchNormalization(name='l2_bn'))
+        # model.add(layers.LeakyReLU(name='l2_leaky'))
+        # assert model.output_shape == (None, 7, 7, 128)
+        #
+        # # Layer 3
+        # model.add(layers.Conv2D(256, (5, 5), strides=(1, 1), padding='same', use_bias=False, name='l3_conv'))
+        # model.add(layers.BatchNormalization(name='l3_bn'))
+        # model.add(layers.LeakyReLU(name='l3_leaky'))
+        # model.add(layers.Flatten(name='l3_flat'))
+        # assert model.output_shape == (None, 7 * 7 * 256)
+        #
+        # # Layer 4
+        # model.add(layers.Dense(self.param.latent_dim, activation='tanh', name='l4_dense'))
+
+        model.summary(line_length=self.param.model_display_len)
+
+        return model
 
 
-class Decoder(tf.keras.Model):
+class Decoder(object):
     def __init__(self, param):
-        super(Decoder, self).__init__()
         self.param = param
 
-        # [None, 256] -> [None, 7, 7, 256]
-        self.l1_dense = layers.Dense(7 * 7 * 256, use_bias=False, input_shape=(param.latent_dim, ), name='l1_dense')
-        self.l1_bn = layers.BatchNormalization(name='l1_bn')
-        self.l1_leaky = layers.LeakyReLU(name='l1_leaky')
-        self.l1_reshape = layers.Reshape((7, 7, 256))
-
-        # [None, 7, 7, 256] -> [None, 7, 7, 128]
-        self.l2_deconv = layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False,
-                                                name='l2_deconv')
-        self.l2_bn = layers.BatchNormalization(name='l2_bn')
-        self.l2_leaky = layers.LeakyReLU(name='l2_leaky')
-
-        # [None, 7, 7, 128] -> [None, 14, 14, 64]
-        self.l3_deconv = layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False,
-                                                name='l3_deconv')
-        self.l3_bn = layers.BatchNormalization(name='l3_bn')
-        self.l3_leaky = layers.LeakyReLU(name='l3_leaky')
-
-        # [None, 14, 14, 64] -> [None, 28, 28, 1]
-        self.l4_deconv = layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', use_bias=False,
-                                                activation=tf.keras.activations.tanh, name='l4_deconv')
-
-
-    def call(self, inputs, training=False):
-        l1 = self.l1_dense(inputs)
-        if training is True:
-            l1 = self.l1_bn(l1)
-        l1 = self.l1_leaky(l1)
-        l1 = self.l1_reshape(l1)
-
-        l2 = self.l2_deconv(l1)
-        if training is True:
-            l2 = self.l2_bn(l2)
-        l2 = self.l2_leaky(l2)
-
-        l3 = self.l3_deconv(l2)
-        if training is True:
-            l3 = self.l3_bn(l3)
-        l3 = self.l3_leaky(l3)
-
-        l4 = self.l4_deconv(l3)
-
-        return l4
-
     def model(self):
-        z = tf.keras.Input(shape=self.param.latent_dim, dtype=tf.float32, name='z')
-        return tf.keras.Model(inputs=z, outputs=self.call(z))
+        model = tf.keras.Sequential(name='Decoder')
+
+        # Layer 1
+        model.add(layers.Dense(256, activation=tf.keras.activations.relu, input_shape=(self.param.latent_dim + self.param.num_class,),
+                               name='l1_dense'))
+        model.add(layers.BatchNormalization(name='l1_bn'))
+        assert model.output_shape == (None, 256)
+
+        # Layer 2
+        model.add(layers.Dense(512, activation=tf.keras.activations.relu, name='l2_dense'))
+        model.add(layers.BatchNormalization(name='l2_bn'))
+        assert model.output_shape == (None, 512)
+
+        # Layer 3
+        model.add(layers.Dense(1024, activation=tf.keras.activations.relu,
+                               input_shape=(self.param.latent_dim + self.param.num_class,),
+                               name='l3_dense'))
+        model.add(layers.BatchNormalization(name='l3_bn'))
+        assert model.output_shape == (None, 1024)
+
+        # Layer 3
+        model.add(layers.Dense(28*28, activation=tf.keras.activations.tanh, name='l4_dense'))
+        model.add(layers.Reshape((28, 28, 1), name='l4_reshape'))
+        assert model.output_shape == (None, 28, 28, 1)
+        #
+        # Layer 1
+        # model.add(layers.Dense(7 * 7 * 256, use_bias=False, input_shape=(self.param.latent_dim + self.param.num_class,),
+        #                        name='l1_dense'))
+        # model.add(layers.BatchNormalization(name='l1_bn'))
+        # model.add(layers.LeakyReLU(name='l1_leaky'))
+        # model.add(layers.Reshape((7, 7, 256), name='l1_reshape'))
+        # assert model.output_shape == (None, 7, 7, 256)
+        #
+        # # Layer 2
+        # model.add(layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False, name='l2_deconv'))
+        # model.add(layers.BatchNormalization(name='l2_bn'))
+        # model.add(layers.LeakyReLU(name='l2_leaky'))
+        # assert model.output_shape == (None, 7, 7, 128)
+        #
+        # # Layer 3
+        # model.add(layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False, name='l3_deconv'))
+        # model.add(layers.BatchNormalization(name='l3_bn'))
+        # model.add(layers.LeakyReLU(name='l3_leaky'))
+        # assert model.output_shape == (None, 14, 14, 64)
+        #
+        # # Layer 4
+        # model.add(layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', use_bias=False, activation='tanh',
+        #                                  name='l4_deconv'))
+        # assert model.output_shape == (None, 28, 28, 1)
+
+        model.summary(line_length=self.param.model_display_len)
+
+        return model
 
 
-class DiscriminatorZ(tf.keras.Model):
+class Discriminator(object):
     def __init__(self, param):
-        super(DiscriminatorZ, self).__init__()
-
         self.param = param
 
-        # [None, 256] -> [None, 128]
-        self.l1_dense = layers.Dense(128, input_shape=(param.latent_dim, ), name='l1_dense')
-        self.l1_relu = layers.ReLU(name='l1_relu')
-        self.l1_drop = layers.Dropout(0.1, name='l1_drop')
-
-        # [None, 128] -> [None, 64]
-        self.l2_dense = layers.Dense(64, name='l2_dense')
-        self.l2_relu = layers.ReLU(name='l2_relu')
-        self.l2_drop = layers.Dropout(0.1, name='l2_drop')
-
-        # [None, 64] -> [None, 32]
-        self.l3_dense = layers.Dense(32, name='l3_dense')
-        self.l3_relu = layers.ReLU(name='l3_relu')
-        self.l3_drop = layers.Dropout(0.1, name='l3_drop')
-
-        # [None, 32] -> [None, 16]
-        self.l4_dense = layers.Dense(16, name='l4_dense')
-        self.l4_relu = layers.ReLU(name='l4_relu')
-        self.l4_drop = layers.Dropout(0.1, name='l4_drop')
-
-        # [None, 16] -> [None, 1]
-        self.l5_dense = layers.Dense(1, name='l5_dense')
-
-
-    def call(self, inputs, training=False):
-        l1 = self.l1_dense(inputs)
-        l1 = self.l1_relu(l1)
-        if training is True:
-            l1 = self.l1_drop(l1)
-
-        l2 = self.l2_dense(l1)
-        l2 = self.l2_relu(l2)
-        if training is True:
-            l2 = self.l2_drop(l2)
-
-        l3 = self.l3_dense(l2)
-        l3 = self.l3_relu(l3)
-        if training is True:
-            l3 = self.l3_drop(l3)
-
-        l4 = self.l4_dense(l3)
-        l4 = self.l4_relu(l4)
-        if training is True:
-            l4 = self.l4_drop(l4)
-
-        l5 = self.l5_dense(l4)
-
-        return l5
-
     def model(self):
-        z = tf.keras.Input(shape=self.param.latent_dim, dtype=tf.float32, name='z')
-        return tf.keras.Model(inputs=z, outputs=self.call(z))
+        model = tf.keras.Sequential(name='Discriminator')
+
+        # Layer 1
+        model.add(layers.Dense(128, input_shape=(self.param.latent_dim + self.param.num_class, ), name='l1_dense'))
+        model.add(layers.LeakyReLU(name='l1_leaky'))
+        model.add(layers.Dropout(0.1, name='l1_drop'))
+        assert model.output_shape == (None, 128)
+
+        # Layer 2
+        model.add(layers.Dense(32, name='l2_dense'))
+        model.add(layers.LeakyReLU(name='l2_leaky'))
+        model.add(layers.Dropout(0.1, name='l2_drop'))
+        assert model.output_shape == (None, 32)
+
+        # Layer 3
+        model.add(layers.Dense(1, use_bias=True, name='l3_dense'))
+        assert model.output_shape == (None, 1)
+
+        model.summary(line_length=self.param.model_display_len)
+
+        return model
+
+
+if __name__ == '__main__':
+    from adversarial_autoencoder.parameter import Parameter
+
+    param = Parameter()
+
+    encoder = Encoder(param).model()
+    decoder = Decoder(param).model()
+    discriminator = Discriminator(param).model()
