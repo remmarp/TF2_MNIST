@@ -148,8 +148,8 @@ def inference():
         num_test += 1
 
     for class_idx in range(0, param.num_class):
-        _y = tf.one_hot(indices=tf.multiply(tf.ones(shape=(param.batch_size), dtype=tf.float32) * class_idx),
-                        depth=param.num_class)
+        _indices = np.ones(param.batch_size, dtype=np.float) * class_idx
+        _y = tf.one_hot(indices=_indices, depth=param.num_class, dtype=tf.float32)
         _z = tf.random.uniform(shape=(param.batch_size, param.latent_dim), minval=-1.0, maxval=1.0,
                                dtype=tf.float32)
 
